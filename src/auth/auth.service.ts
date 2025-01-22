@@ -44,7 +44,8 @@ export class AuthService {
     });
   }
 
-  private async generateQRCode(totpURI: string) {
+  private async generateQRCode(totp: OTPAuth.TOTP): Promise<string> {
+    const totpURI = OTPAuth.URI.stringify(totp);
     return QRCode.toDataURL(totpURI);
   }
 
@@ -104,7 +105,7 @@ export class AuthService {
     await this.userService.updateUserTOTP(newUser.id, serializedTOTP);
 
     // Generate QR code for user to scan
-    const qrCode = await this.generateQRCode(OTPAuth.URI.stringify(totp));
+    const qrCode = await this.generateQRCode(totp);
 
     return { image: qrCode };
   }
