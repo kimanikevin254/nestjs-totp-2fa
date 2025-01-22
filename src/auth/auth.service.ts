@@ -5,8 +5,6 @@ import { LogInDto } from './dto/login.dto';
 import * as bcrypt from 'bcrypt';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
-import * as OTPAuth from 'otpauth';
-import * as QRCode from 'qrcode';
 
 @Injectable()
 export class AuthService {
@@ -33,51 +31,6 @@ export class AuthService {
     return { access: accessToken };
   }
 
-  private generateTOTP(email: string): OTPAuth.TOTP {
-    return new OTPAuth.TOTP({
-      issuer: 'NestJS App',
-      label: email,
-      algorithm: 'SHA256',
-      digits: 6,
-      period: 30,
-      secret: new OTPAuth.Secret(),
-    });
-  }
-
-  private async generateQRCode(totpURI: string) {
-    return QRCode.toDataURL(totpURI);
-  }
-
-  private serializeTOTP(totp: OTPAuth.TOTP) {
-    return JSON.stringify({
-      issuer: totp.issuer,
-      label: totp.label,
-      issuerInLabel: totp.issuerInLabel,
-      secret: totp.secret.hex,
-      algorithm: totp.algorithm,
-      digits: totp.digits,
-      period: totp.period,
-    });
-  }
-
-  private deserializeTOTP(totpString: string): OTPAuth.TOTP {
-    const parsed = JSON.parse(totpString);
-
-    return new OTPAuth.TOTP({
-      issuer: parsed.issuer,
-      label: parsed.label,
-      issuerInLabel: parsed.issuerInLabel,
-      secret: OTPAuth.Secret.fromHex(parsed.secret),
-      algorithm: parsed.algorithm,
-      digits: parsed.digits,
-      period: parsed.period,
-    });
-  }
-
-  private validateTOTP(token: string, totp: OTPAuth.TOTP) {
-    return totp.validate({ token, window: 1 });
-  }
-
   async signup(dto: SignUpDto) {
     // Check is user exists
     const user = await this.userService.findByEmail(dto.email);
@@ -94,19 +47,10 @@ export class AuthService {
 
     const newUser = await this.userService.create({ ...dto, passwordHash });
 
-    // Generate TOTP object
-    const totp = this.generateTOTP(newUser.email);
+    // Generate tokens
+    const tokens = await this.generateTokens(newUser.id);
 
-    // Serialize totp
-    const serializedTOTP = this.serializeTOTP(totp);
-
-    // Save user TOTP
-    await this.userService.updateUserTOTP(newUser.id, serializedTOTP);
-
-    // Generate QR code for user to scan
-    const qrCode = await this.generateQRCode(OTPAuth.URI.stringify(totp));
-
-    return { image: qrCode };
+    return { tokens };
   }
 
   async login(dto: LogInDto) {
@@ -126,24 +70,7 @@ export class AuthService {
       throw new HttpException('Incorrect credentials', HttpStatus.UNAUTHORIZED);
     }
 
-    return {
-      message: 'Provide the OTP from your Authenticator app',
-      userId: user.id,
-    };
-  }
-
-  async twoFactorAuth(userId: string, token: string) {
-    // Retrieve user
-    const user = await this.userService.findById(userId);
-
-    // Deserialize saved totp
-    const deserializedTOTP = this.deserializeTOTP(user.totp);
-
-    // Validate token
-    if (this.validateTOTP(token, deserializedTOTP) === null) {
-      throw new HttpException('Invalid token', HttpStatus.UNAUTHORIZED);
-    }
-
+    // Generate tokens
     const tokens = await this.generateTokens(user.id);
 
     return {

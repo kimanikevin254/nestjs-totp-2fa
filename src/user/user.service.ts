@@ -1,4 +1,4 @@
-import { HttpException, HttpStatus, Injectable } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { User } from './user.entity';
 import { Repository } from 'typeorm';
@@ -36,22 +36,5 @@ export class UserService {
   async profile(userId: string): Promise<Partial<User>> {
     const user = await this.findById(userId);
     return this.sanitize(user, ['passwordHash']);
-  }
-
-  async updateUserTOTP(userId: string, totp: string) {
-    // Retrieve user
-    const user = await this.findById(userId);
-
-    if (!user) {
-      throw new HttpException(
-        'User with the provided ID does not exist',
-        HttpStatus.NOT_FOUND,
-      );
-    }
-
-    // update user totp
-    user.totp = totp;
-
-    return this.userRepository.save(user);
   }
 }
